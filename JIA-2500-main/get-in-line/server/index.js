@@ -1,63 +1,103 @@
-const express = require('express'); 
+const express = require('express');
 const cors = require('cors');
 const twilio = require('twilio');
-var axios = require('axios');
+const axios = require('axios');
 
-const app = express(); //alias
+require('dotenv').config({ path: '../.env' });
 
-require('dotenv').config({path:'../.env' });
+const app = express();
 
+app.use(express.json());
 
-//twilio requirements -- change these to your account SID/token
-const accountSid = process.env.TWILIO_ACCOUNT_SID;
-const authToken = process.env.TWILIO_AUTH_TOKEN; 
-const googleMaps = process.env.GOOGLE_MAPS_API_KEY;
-const client = new twilio("AC57ba81c90ea1c0f8018490dc0416fb44", "e3281016f8f1bc86f7c7766f8fb7e553");
+app.use(cors({
+  origin: process.env.CLIENT_ORIGIN || 'http://localhost:3000',
+  methods: ['GET', 'POST'],
+  allowedHeaders: ['Content-Type'],
+}));
 
-app.use(cors()); //Blocks browser from restricting any data
+const requiredTwilioEnv = [
+  'TWILIO_ACCOUNT_SID',
+  'TWILIO_AUTH_TOKEN',
+  'TWILIO_PHONE_NUMBER',
+];
 
-//Welcome Page for the Server 
+const hasTwilioConfig = requiredTwilioEnv.every((key) => Boolean(process.env[key]));
+const client = hasTwilioConfig
+  ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
+  : null;
+
+//Welcome Page for the Server
 app.get('/', (req, res) => {
     res.send('Welcome to the Express Server')
 })
 
-//Twilio 
-app.get('/send-text', (req, res) => {
-    //Welcome Message
-    res.send('Hello to the Twilio Server')
+async function sendTextMessage(recipient, textMessage) {
+    if (!client) {
+        const error = new Error('SMS service is not configured');
+        error.statusCode = 503;
+        throw error;
+    }
 
-    //_GET Variables
-    const { recipient, textmessage } = req.query;
+    if (!recipient || !textMessage) {
+        const error = new Error('recipient and textMessage are required');
+        error.statusCode = 400;
+        throw error;
+    }
 
-    //Send Text
-    client.messages.create({
-        body: textmessage,
-        to: recipient,  // Text this number
-        from: '+12077421947' // From a valid Twilio number
-    }).then((message) => console.log(message.body));
-})
+    return client.messages.create({
+        body: textMessage,
+        to: recipient,
+        from: process.env.TWILIO_PHONE_NUMBER
+    });
+}
+
+//Twilio
+app.post('/send-text', async (req, res) => {
+    try {
+        const { recipient, textMessage } = req.body;
+        const message = await sendTextMessage(recipient, textMessage);
+        res.status(202).json({ status: 'queued', sid: message.sid });
+    } catch (error) {
+        console.error('SMS send failed', error.message);
+        res.status(error.statusCode || 500).json({ error: error.message });
+    }
+});
+
+// Backward-compatible route for older clients. Prefer POST /send-text.
+app.get('/send-text', async (req, res) => {
+    try {
+        const { recipient, textmessage } = req.query;
+        const message = await sendTextMessage(recipient, textmessage);
+        res.status(202).json({ status: 'queued', sid: message.sid });
+    } catch (error) {
+        console.error('SMS send failed', error.message);
+        res.status(error.statusCode || 500).json({ error: error.message });
+    }
+});
 
 //Google Maps API
 app.get('/calculate-distance', (req, res) => {
     const { origins, destinations } = req.query;
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+
+    if (!apiKey) {
+        return res.status(503).json({ error: 'Google Maps API key is not configured' });
+    }
 
     var config = {
         method: 'get',
-        url: `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${origins}&destinations=${destinations}&units=imperial&key=${process.env.GOOGLE_MAPS_API_KEY}`,
+        url: `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(origins)}&destinations=${encodeURIComponent(destinations)}&units=imperial&key=${apiKey}`,
         headers: { }
     };
-      
+
     axios(config)
     .then(function (response) {
-        console.log(JSON.stringify(response.data));
-        res.statusCode = 200;
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify(response.data));
+        res.status(200).json(response.data);
     })
     .catch(function (error) {
-        console.log(error);
+        console.error('Distance calculation failed', error.message);
+        res.status(500).json({ error: 'Distance calculation failed' });
     });
+});
 
-})
-
-app.listen(4000, () => console.log("Running on Port 4000"))
+app.listen(process.env.PORT || 4000, () => console.log(`Running on Port ${process.env.PORT || 4000}`));

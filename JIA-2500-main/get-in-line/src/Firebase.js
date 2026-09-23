@@ -11,11 +11,9 @@ import {
 } from "firebase/auth";
 import {
   getFirestore,
-  query,
-  getDocs,
-  collection,
-  where,
-  addDoc,
+  getDoc,
+  doc,
+  setDoc,
 } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -30,69 +28,71 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-
-
 const auth = getAuth(app);
+
+const getUserProfile = async (uid) => {
+  if (!uid) return null;
+
+  const profile = await getDoc(doc(db, "users", uid));
+  if (!profile.exists()) return null;
+
+  return {
+    id: profile.id,
+    ...profile.data(),
+  };
+};
 
 const googleProvider = new GoogleAuthProvider();
 const signInWithGoogle = async () => {
-  try {
-    const res = await signInWithPopup(auth, googleProvider);
-    const user = res.user;
-    const q = query(collection(db, "users"), where("uid", "==", user.uid));
-    const docs = await getDocs(q);
-    if (docs.docs.length === 0) {
-      await addDoc(collection(db, "users"), {
-        uid: user.uid,
-        name: user.displayName,
-        authProvider: "google",
-        email: user.email
-      });
-    }
-  } catch (err) {
-    console.error(err);
-    alert(err.message);
-  }
-};
-const logInWithEmailAndPassword = async (email, password) => {
-  try {
-    await signInWithEmailAndPassword(auth, email, password);
-  } catch (err) {
-    console.error(err);
-    alert(err.message);
-  }
-};
-const registerWithEmailAndPassword = async (name, email, password, adminStatus) => {
-  try {
-    const res = await createUserWithEmailAndPassword(auth, email, password);
-    const user = res.user;
-    await addDoc(collection(db, "users"), {
+  const res = await signInWithPopup(auth, googleProvider);
+  const user = res.user;
+  const existingProfile = await getUserProfile(user.uid);
+
+  if (!existingProfile) {
+    await setDoc(doc(db, "users", user.uid), {
       uid: user.uid,
-      name,
-      authProvider: "local",
-      email,
-      admin: adminStatus
+      name: user.displayName,
+      authProvider: "google",
+      email: user.email,
+      admin: false,
     });
-  } catch (err) {
-    console.error(err);
-    alert(err.message);
   }
+
+  return user;
 };
+
+const logInWithEmailAndPassword = async (email, password) => {
+  await signInWithEmailAndPassword(auth, email, password);
+};
+
+const registerWithEmailAndPassword = async (name, email, password, adminStatus = false) => {
+  const res = await createUserWithEmailAndPassword(auth, email, password);
+  const user = res.user;
+
+  await setDoc(doc(db, "users", user.uid), {
+    uid: user.uid,
+    name,
+    authProvider: "local",
+    email,
+    admin: Boolean(adminStatus),
+  });
+
+  return user;
+};
+
 const sendPasswordReset = async (email) => {
-  try {
-    await sendPasswordResetEmail(auth, email);
-    alert("Password reset link sent!");
-  } catch (err) {
-    console.error(err);
-    alert(err.message);
-  }
+  await sendPasswordResetEmail(auth, email);
+  alert("Password reset link sent!");
 };
+
 const logout = () => {
-  signOut(auth);
+  return signOut(auth);
 };
+
 export {
   auth,
   db,
+  getUserProfile,
   signInWithGoogle,
   logInWithEmailAndPassword,
   registerWithEmailAndPassword,

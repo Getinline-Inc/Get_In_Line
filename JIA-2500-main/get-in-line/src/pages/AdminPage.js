@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import QRCode from 'react-qr-code'
 import Event from '../components/Event';
 
-import { auth, db, logout } from '../Firebase';
+import { auth, db, logout, getUserProfile } from '../Firebase';
 import { collection, doc, getDocs, query, setDoc, limit, onSnapshot, deleteDoc, updateDoc, where } from 'firebase/firestore';
 import { async } from '@firebase/util';
 
@@ -18,28 +18,44 @@ export default function AdminPage() {
 
   const [user, loading, error] = useAuthState(auth);
   const [name, setName] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
   const navigate = useNavigate();
-  const fetchUserName = async () => {
+  const fetchUserProfile = async () => {
       try {
-        const q = query(collection(db, "users"), where("uid", "==", user?.uid));
-        const doc = await getDocs(q);
-        const data = doc.docs[0].data();
-        setName(data.name);
+        const data = await getUserProfile(user?.uid);
 
+        if (!data?.admin) {
+          alert("Admin access is required.");
+          await logout();
+          navigate("/");
+          return;
+        }
+
+        setName(data.name);
+        setIsAdmin(true);
       } catch (err) {
         console.error(err);
         alert("An error occured while fetching user data");
+        navigate("/");
+      } finally {
+        setAuthChecked(true);
       }
     };
     useEffect(() => {
       if (loading) return;
-      if (!user) return navigate("/");
-      fetchUserName();
+      if (!user) {
+        setAuthChecked(true);
+        return navigate("/");
+      }
+      fetchUserProfile();
     }, [user, loading]);
 
   const [events, setEvents] = React.useState([]);
 
   React.useEffect(() => {
+    if (!isAdmin) return;
+
     const q = query(collection(db, "event"));
     const eventList = onSnapshot(q, (querySnapshot) => {
       let eventsArray = [];
@@ -49,13 +65,17 @@ export default function AdminPage() {
       setEvents(eventsArray);
     });
     return () => eventList();
-  }, []);
+  }, [isAdmin]);
 
   const handleDelete = async (eventName) => {
     await deleteDoc(doc(db, "event", eventName));
   };
 
 
+
+  if (!authChecked || !isAdmin) {
+    return <div>Checking admin access...</div>;
+  }
 
   // ----Dropdown code----
   let options1 = events;
