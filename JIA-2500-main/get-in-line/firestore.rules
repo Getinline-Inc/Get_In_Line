@@ -6,17 +6,23 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function currentUserProfile() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    function userProfile(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
     }
 
     function isAdmin() {
-      return signedIn() && currentUserProfile().admin == true;
+      return signedIn() && userProfile(request.auth.uid).admin == true;
+    }
+
+    function publicQueueUpdateOnly() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['queue', 'numOfPeople', 'dequeueTimes']);
     }
 
     match /users/{userId} {
-      allow read: if signedIn() && (request.auth.uid == resource.data.uid || isAdmin());
+      allow read: if signedIn() && (request.auth.uid == userId || isAdmin());
       allow create: if signedIn()
+        && request.auth.uid == userId
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.admin == false;
       allow update, delete: if isAdmin();
@@ -24,7 +30,8 @@ service cloud.firestore {
 
     match /event/{eventId} {
       allow read: if true;
-      allow create, update, delete: if isAdmin();
+      allow update: if isAdmin() || publicQueueUpdateOnly();
+      allow create, delete: if isAdmin();
     }
   }
 }
