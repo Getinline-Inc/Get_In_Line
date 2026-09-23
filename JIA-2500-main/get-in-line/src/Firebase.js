@@ -11,11 +11,9 @@ import {
 } from "firebase/auth";
 import {
   getFirestore,
-  query,
-  getDocs,
-  collection,
-  where,
-  addDoc,
+  getDoc,
+  doc,
+  setDoc,
 } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -35,20 +33,13 @@ const auth = getAuth(app);
 const getUserProfile = async (uid) => {
   if (!uid) return null;
 
-  const q = query(collection(db, "users"), where("uid", "==", uid));
-  const docs = await getDocs(q);
-
-  if (docs.docs.length === 0) return null;
+  const profile = await getDoc(doc(db, "users", uid));
+  if (!profile.exists()) return null;
 
   return {
-    id: docs.docs[0].id,
-    ...docs.docs[0].data(),
+    id: profile.id,
+    ...profile.data(),
   };
-};
-
-const isCurrentUserAdmin = async () => {
-  const profile = await getUserProfile(auth.currentUser?.uid);
-  return Boolean(profile?.admin);
 };
 
 const googleProvider = new GoogleAuthProvider();
@@ -58,7 +49,7 @@ const signInWithGoogle = async () => {
   const existingProfile = await getUserProfile(user.uid);
 
   if (!existingProfile) {
-    await addDoc(collection(db, "users"), {
+    await setDoc(doc(db, "users", user.uid), {
       uid: user.uid,
       name: user.displayName,
       authProvider: "google",
@@ -78,7 +69,7 @@ const registerWithEmailAndPassword = async (name, email, password, adminStatus =
   const res = await createUserWithEmailAndPassword(auth, email, password);
   const user = res.user;
 
-  await addDoc(collection(db, "users"), {
+  await setDoc(doc(db, "users", user.uid), {
     uid: user.uid,
     name,
     authProvider: "local",
@@ -102,7 +93,6 @@ export {
   auth,
   db,
   getUserProfile,
-  isCurrentUserAdmin,
   signInWithGoogle,
   logInWithEmailAndPassword,
   registerWithEmailAndPassword,
