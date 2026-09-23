@@ -1,8 +1,8 @@
 import { useParams } from 'react-router-dom'
 
-import { collection, doc, getDocs, query, setDoc, limit, onSnapshot, deleteDoc, updateDoc, where, arrayRemove } from 'firebase/firestore';
+import { collection, doc, getDocs, query, limit, updateDoc } from 'firebase/firestore';
 import LogoutButton from '../components/LogoutButton';
-import { auth, db, logout, registerWithEmailAndPassword, } from '../Firebase';
+import { auth, db } from '../Firebase';
 import { useAuthState } from "react-firebase-hooks/auth";
 import { Link, useNavigate } from "react-router-dom";
 import React, { useState, useEffect } from 'react';
@@ -10,9 +10,7 @@ import React, { useState, useEffect } from 'react';
 export default function EventDisplayPage() {
 
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [user, loading, error] = useAuthState(auth);
-  const navigate = useNavigate();
   useEffect(() => {
     if (loading) {
       // maybe trigger a loading screen
@@ -34,8 +32,11 @@ export default function EventDisplayPage() {
       sendTextAddUser = _ => {
         const { text } = this.state;
         //pass text message GET variables via query string
-        fetch(`http://localhost:4000/send-text?recipient=${text.recipient}&textmessage=${text.textmessage}`)
-        .catch(err => console.error(err))
+        fetch(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:4000'}/send-text`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recipient: text.recipient, textMessage: text.textmessage }),
+        }).catch(err => console.error(err))
 
         //add user to queue on same button click
         verifyUserAdd();
@@ -136,11 +137,7 @@ export default function EventDisplayPage() {
       alert("Removing " + UserEmail + " from " + Event);
 
       
-      user.delete().then(function() {
-        // User deleted.
-      }, function(error) {
-        // An error happened.
-      });
+
     }
 
     function verifyUserAdd() {
@@ -180,8 +177,6 @@ export default function EventDisplayPage() {
 
         //add user to queue
         queue.push(UserEmail);
-
-        registerWithEmailAndPassword(UserName, UserEmail, "TemporaryMeasure123", false);
 
         //update document with new queue and number of people
         updateDoc(event, {
