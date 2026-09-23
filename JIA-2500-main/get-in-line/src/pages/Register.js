@@ -8,22 +8,14 @@ import {
 } from "../Firebase";
 import "./register.css";
 
-var adminStatus = true;
-
 function Register() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [user, loading, error] = useAuthState(auth);
-  const [isAdmin, setIsAdmin] = useState(true);
+  const [user, loading] = useAuthState(auth);
   const navigate = useNavigate();
 
-  const handleAdminChange = event => {
-    setIsAdmin(event.target.checked);
-    adminStatus = event.target.checked;
-  };
-
-  const register = () => {
+  const register = async () => {
     var validationCode = validate();
     if (validationCode === 1) {
       alert("Please enter name.");
@@ -33,10 +25,11 @@ function Register() {
       alert("Please enter a password.");
     } else {
       try {
-        registerWithEmailAndPassword(name, email, password, adminStatus);
+        await registerWithEmailAndPassword(name, email, password, false);
         navigate("/login");
       } catch (e) {
-        console.log('Error');
+        console.error(e);
+        alert(e.message);
       }
     }
   };
@@ -44,6 +37,7 @@ function Register() {
   useEffect(() => {
     if (loading) return;
   }, [user, loading]);
+
   return (
     <div className="register">
       <div className="register__container">
@@ -68,8 +62,6 @@ function Register() {
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Password"
         />
-        <input type="checkbox" id="admin" name="admin" onChange={handleAdminChange} checked={isAdmin} />
-      <label htmlFor="admin">Admin</label>
         <button className="register__btn" onClick={register}>
           Register
         </button>
@@ -86,8 +78,6 @@ function Register() {
     </div>
   );
 
-
-  // ---------- HELPER FUNCTIONS ----------
   function validate() {
     if (!name) {
       return 1;
@@ -101,7 +91,7 @@ function Register() {
   }
 
   function isEmail(string) {
-    var matcher = /^[a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+    var matcher = /^[a-zA-Z0-9.!#$%&'*+\/?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
     return matcher.test(string);
   }
 }
